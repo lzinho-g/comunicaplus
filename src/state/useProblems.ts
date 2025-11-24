@@ -15,6 +15,7 @@ type Store = {
   addProblem: (p: ProblemInput) => Promise<void>;
   vote: (id: string) => Promise<void>;
   setStatus: (id: string, status: Problem["status"]) => Promise<void>;
+  persist: () => Promise<void>;
   load: () => Promise<void>;
   clearAll: () => Promise<void>;
 };
@@ -68,4 +69,4 @@ export const useProblems = create<Store>((set, get) => ({
     set({ problems: [] });
     await AsyncStorage.removeItem(KEY);
   },
-})) as any;
+}));

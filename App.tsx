@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { NavigationContainer, DefaultTheme, Theme } from "@react-navigation/native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import RootNavigator from "./src/navigation/RootNavigator";
 import { useProblems } from "./src/state/useProblems";
 import { StatusBar, View } from "react-native";
@@ -27,11 +28,13 @@ export default function App() {
   }, [load]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-      <StatusBar barStyle="light-content" />
-      <NavigationContainer theme={navDark}>
-        <RootNavigator />
-      </NavigationContainer>
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+        <StatusBar barStyle="light-content" />
+        <NavigationContainer theme={navDark}>
+          <RootNavigator />
+        </NavigationContainer>
+      </View>
+    </SafeAreaProvider>
   );
 }
