@@ -22,15 +22,20 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "FOREGROUND_SERVICE_LOCATION"
-      ]
+      ],
+      "package": "com.luiz.comunicaplus"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "1d421b8c-1b4b-42d9-b95a-3931cad8b942"
+      }
     }
   }
 }
