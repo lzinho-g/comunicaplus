@@ -23,6 +23,19 @@ export default function MapScreen() {
   const route = useRoute<any>();
   const mapRef = useRef<MapView>(null);
 
+  // 🔹 Somente problemas com latitude/longitude válidos
+  const validProblems = useMemo(
+    () =>
+      problems.filter(
+        (p) =>
+          typeof p.latitude === "number" &&
+          !Number.isNaN(p.latitude) &&
+          typeof p.longitude === "number" &&
+          !Number.isNaN(p.longitude)
+      ),
+    [problems]
+  );
+
   // id do problema a focar (quando vem do Feed)
   const focusId: string | undefined = route.params?.focusId;
 
@@ -82,10 +95,10 @@ export default function MapScreen() {
     navigation.navigate("Feed");
   }
 
-  // Região inicial
+  // Região inicial (usa o primeiro problema válido, se existir)
   const initialRegion = useMemo(() => {
-    if (problems.length > 0) {
-      const p = problems[0];
+    if (validProblems.length > 0) {
+      const p = validProblems[0];
       return {
         latitude: p.latitude,
         longitude: p.longitude,
@@ -93,19 +106,20 @@ export default function MapScreen() {
         longitudeDelta: 0.08,
       };
     }
+    // fallback Florianópolis
     return {
       latitude: -27.5969,
       longitude: -48.5495,
       latitudeDelta: 0.12,
       longitudeDelta: 0.12,
     };
-  }, [problems]);
+  }, [validProblems]);
 
-  // Ajustar mapa para caber todos os pins
+  // Ajustar mapa para caber todos os pins válidos
   useEffect(() => {
-    if (!mapRef.current || problems.length === 0) return;
+    if (!mapRef.current || validProblems.length === 0) return;
 
-    const coords = problems.map((p: Problem) => ({
+    const coords = validProblems.map((p: Problem) => ({
       latitude: p.latitude,
       longitude: p.longitude,
     }));
@@ -114,13 +128,13 @@ export default function MapScreen() {
       edgePadding: { top: 60, right: 60, bottom: 80, left: 60 },
       animated: true,
     });
-  }, [problems]);
+  }, [validProblems]);
 
-  // 🔎 Se veio um focusId (clicou em "Mapa" no Feed), foca nesse problema
+  // 🔎 Se veio um focusId (clicou em "Mapa" no Feed), foca nesse problema válido
   useEffect(() => {
-    if (!focusId || problems.length === 0) return;
+    if (!focusId || validProblems.length === 0) return;
 
-    const p = problems.find((pr) => pr.id === focusId);
+    const p = validProblems.find((pr) => pr.id === focusId);
     if (!p) return;
 
     // abre o card, centraliza e faz o pin "pular"
@@ -136,7 +150,7 @@ export default function MapScreen() {
       },
       300
     );
-  }, [focusId, problems]);
+  }, [focusId, validProblems]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -146,7 +160,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
       >
-        {problems.map((p: Problem) => {
+        {validProblems.map((p: Problem) => {
           const anim = getPinAnim(p.id);
           const isSelected = selected?.id === p.id;
 
