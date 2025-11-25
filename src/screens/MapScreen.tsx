@@ -7,7 +7,7 @@ import {
   Animated,
   Image,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker } from "react-native-maps";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useProblems } from "../state/useProblems";
 import type { Problem } from "../state/useProblems";
@@ -145,7 +145,6 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        provider={PROVIDER_GOOGLE}
       >
         {problems.map((p: Problem) => {
           const anim = getPinAnim(p.id);
