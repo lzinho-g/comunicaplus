@@ -27,7 +27,13 @@
         "ACCESS_FINE_LOCATION",
         "FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.luiz.comunicaplus"
+      "package": "com.luiz.comunicaplus",
+
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDN8PGbCNlBrx09PyM1xu9oRsTkc0SavsQ"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
