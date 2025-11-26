@@ -6,14 +6,25 @@ import { theme } from "../theme/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AppHeader() {
-  const [permStatus, setPermStatus] = useState<"granted" | "denied" | "undetermined">("undetermined");
+  const [permStatus, setPermStatus] = useState<
+    "granted" | "denied" | "undetermined"
+  >("undetermined");
   const [servicesOn, setServicesOn] = useState<boolean>(false);
   const isFocused = useIsFocused();
 
   async function checkGps() {
     try {
-      const perm = await Location.getForegroundPermissionsAsync();
-      const on = await Location.hasServicesEnabledAsync(); // <- GPS físico
+      // 1) ver permissão atual
+      let perm = await Location.getForegroundPermissionsAsync();
+
+      // 2) se ainda não foi perguntado, pedir agora
+      if (perm.status === "undetermined") {
+        perm = await Location.requestForegroundPermissionsAsync();
+      }
+
+      // 3) checar se o serviço de localização do aparelho está ligado
+      const on = await Location.hasServicesEnabledAsync();
+
       setPermStatus(perm.status);
       setServicesOn(on);
     } catch {
@@ -22,26 +33,43 @@ export default function AppHeader() {
     }
   }
 
-  // quando a aba ganha foco, revalida
+  // quando a aba ganha foco
   useEffect(() => {
     if (isFocused) checkGps();
   }, [isFocused]);
 
-  // quando o app volta ao foreground, revalida
+  // quando o app volta pro foreground
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
-      if (state === "active") checkGps();
-    });
+    const sub = AppState.addEventListener(
+      "change",
+      (state: AppStateStatus) => {
+        if (state === "active") checkGps();
+      }
+    );
     return () => sub.remove();
   }, []);
 
-  // poll leve (opcional) para refletir mudanças rápidas do usuário
+  // poll leve
   useEffect(() => {
     const id = setInterval(checkGps, 4000);
     return () => clearInterval(id);
   }, []);
 
   const gpsAtivo = permStatus === "granted" && servicesOn;
+
+  let label = "";
+  let color = "";
+
+  if (permStatus !== "granted") {
+    label = "GPS sem permissão";
+    color = "#FBBF24"; // amarelo
+  } else if (gpsAtivo) {
+    label = "GPS ativo";
+    color = "#34D399"; // verde
+  } else {
+    label = "GPS desligado";
+    color = "#F87171"; // vermelho
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -51,10 +79,8 @@ export default function AppHeader() {
           <Text style={styles.brand}>Comunica+</Text>
         </View>
 
-        <View style={[styles.gpsPill, { borderColor: gpsAtivo ? "#34D399" : "#F87171" }]}>
-          <Text style={[styles.gpsText, { color: gpsAtivo ? "#34D399" : "#F87171" }]}>
-            GPS {gpsAtivo ? "ativo" : "desligado"}
-          </Text>
+        <View style={[styles.gpsPill, { borderColor: color }]}>
+          <Text style={[styles.gpsText, { color }]}>{label}</Text>
         </View>
       </View>
     </SafeAreaView>
@@ -75,6 +101,11 @@ const styles = StyleSheet.create({
   left: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   brand: { color: theme.colors.text, fontSize: 18, fontWeight: "800" },
-  gpsPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
+  gpsPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
   gpsText: { fontWeight: "700", fontSize: 12 },
 });
