@@ -55,20 +55,26 @@ export default function AppHeader() {
     return () => clearInterval(id);
   }, []);
 
-  const gpsAtivo = permStatus === "granted" && servicesOn;
-
+  // --- LÓGICA DOS 3 ESTADOS ---
   let label = "";
-  let color = "";
+  let pillStyle = {};
+  let textColor = "#fff";
 
-  if (permStatus !== "granted") {
-    label = "GPS sem permissão";
-    color = "#FBBF24"; // amarelo
-  } else if (gpsAtivo) {
+  if (permStatus === "granted" && servicesOn) {
+    // GPS ATIVO
     label = "GPS ativo";
-    color = "#34D399"; // verde
-  } else {
+    pillStyle = styles.gpsPillOn;
+    textColor = "#22c55e";
+  } else if (permStatus === "granted" && !servicesOn) {
+    // PERMISSÃO OK, MAS SERVIÇO DESLIGADO
     label = "GPS desligado";
-    color = "#F87171"; // vermelho
+    pillStyle = styles.gpsPillOff;
+    textColor = "#ef4444";
+  } else {
+    // PERMISSÃO NEGADA (ou nunca concedida)
+    label = "GPS sem permissão";
+    pillStyle = styles.gpsPillWarning;
+    textColor = "#facc15";
   }
 
   return (
@@ -79,8 +85,8 @@ export default function AppHeader() {
           <Text style={styles.brand}>Comunica+</Text>
         </View>
 
-        <View style={[styles.gpsPill, { borderColor: color }]}>
-          <Text style={[styles.gpsText, { color }]}>{label}</Text>
+        <View style={[styles.gpsPillBase, pillStyle]}>
+          <Text style={[styles.gpsText, { color: textColor }]}>{label}</Text>
         </View>
       </View>
     </SafeAreaView>
@@ -101,11 +107,26 @@ const styles = StyleSheet.create({
   left: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   brand: { color: theme.colors.text, fontSize: 18, fontWeight: "800" },
-  gpsPill: {
+
+  // base do “pill”
+  gpsPillBase: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 999,
     borderWidth: 1,
+  },
+  // estilos de cada estado
+  gpsPillOn: {
+    backgroundColor: "rgba(34,197,94,0.08)",
+    borderColor: "#22c55e",
+  },
+  gpsPillOff: {
+    backgroundColor: "rgba(239,68,68,0.08)",
+    borderColor: "#ef4444",
+  },
+  gpsPillWarning: {
+    backgroundColor: "rgba(250,204,21,0.08)",
+    borderColor: "#facc15",
   },
   gpsText: { fontWeight: "700", fontSize: 12 },
 });

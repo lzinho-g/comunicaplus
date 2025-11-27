@@ -14,17 +14,42 @@ import {
   Keyboard,
   Image,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../state/useAuth";
 import { theme } from "../theme/theme";
 
-// 🔹 Validação simples de e-mail
+/* ---------- HELPERS ---------- */
+
+// apenas letras e espaços (se quiser usar em algum lugar)
+function onlyLetters(text: string) {
+  return text.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ ]/g, "");
+}
+
+// máscara de CPF para exibição/digitação
+function cpfMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+}
+
+// máscara de telefone (DD + número)
+function phoneMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+// validação simples de e-mail
 function isValidEmail(email: string) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  return re.test(email.toLowerCase());
 }
+
+/* -------------------------------- */
 
 export default function ProfileScreen() {
   const { user, logout, deleteAccount, updateProfile } = useAuth();
@@ -40,15 +65,15 @@ export default function ProfileScreen() {
   // 🔹 MODO EDIÇÃO
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name ?? "");
-  const [cpf, setCpf] = useState(user?.cpf ?? "");
-  const [phone, setPhone] = useState(user?.phone ?? "");
+  const [cpf, setCpf] = useState(user?.cpf ? cpfMask(user.cpf) : "");
+  const [phone, setPhone] = useState(user?.phone ? phoneMask(user.phone) : "");
   const [address, setAddress] = useState(user?.address ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
 
   function startEdit() {
     setName(user?.name ?? "");
-    setCpf(user?.cpf ?? "");
-    setPhone(user?.phone ?? "");
+    setCpf(user?.cpf ? cpfMask(user.cpf) : "");
+    setPhone(user?.phone ? phoneMask(user.phone) : "");
     setAddress(user?.address ?? "");
     setEmail(user?.email ?? "");
     setEditing(true);
@@ -56,7 +81,6 @@ export default function ProfileScreen() {
 
   function handleToggleNotifications(value: boolean) {
     setNotificationsEnabled(value);
-    // poderia salvar em AsyncStorage no futuro
   }
 
   function handleDeleteAccount() {
@@ -89,34 +113,26 @@ export default function ProfileScreen() {
     ]);
   }
 
-  // 🔹 SALVAR EDIÇÃO COM VALIDAÇÃO
+  // 🔹 SALVAR EDIÇÃO COM VALIDAÇÃO + REMOVER MÁSCARAS
   async function handleSaveEdit() {
     const trimmedName = name.trim();
-    const trimmedCpf = cpf.trim();
-    const trimmedPhone = phone.trim();
     const trimmedAddress = address.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
-    if (
-      !trimmedName ||
-      !trimmedCpf ||
-      !trimmedPhone ||
-      !trimmedAddress ||
-      !trimmedEmail
-    ) {
+    if (!trimmedName || !cpf || !phone || !trimmedAddress || !trimmedEmail) {
       return Alert.alert("Atenção", "Preencha todos os campos.");
     }
 
-    // Nome: evita caracteres muito estranhos
-    if (/[^\wÀ-ÖØ-öø-ÿ\s.,-]/.test(trimmedName)) {
+    // Nome: apenas letras e espaços
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ ]+$/.test(trimmedName) || trimmedName.length < 3) {
       return Alert.alert(
         "Nome inválido",
-        "Evite caracteres especiais estranhos no nome."
+        "Use apenas letras e espaços (mínimo 3 caracteres)."
       );
     }
 
-    // CPF: só dígitos e exatamente 11 números
-    const cpfDigits = trimmedCpf.replace(/\D/g, "");
+    // remove formatação do CPF
+    const cpfDigits = cpf.replace(/\D/g, "");
     if (cpfDigits.length !== 11) {
       return Alert.alert(
         "CPF inválido",
@@ -124,8 +140,8 @@ export default function ProfileScreen() {
       );
     }
 
-    // Telefone: só dígitos e 10 ou 11 números
-    const phoneDigits = trimmedPhone.replace(/\D/g, "");
+    // remove formatação do telefone
+    const phoneDigits = phone.replace(/\D/g, "");
     if (phoneDigits.length < 10 || phoneDigits.length > 11) {
       return Alert.alert(
         "Telefone inválido",
@@ -133,7 +149,7 @@ export default function ProfileScreen() {
       );
     }
 
-    // E-mail
+    // e-mail
     if (!isValidEmail(trimmedEmail)) {
       return Alert.alert("E-mail inválido", "Informe um e-mail válido.");
     }
@@ -207,7 +223,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={name}
-                onChangeText={setName}
+                onChangeText={(txt) => setName(onlyLetters(txt))}
                 placeholder="Seu nome"
                 placeholderTextColor={theme.colors.textMuted}
               />
@@ -217,10 +233,11 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={cpf}
-                onChangeText={(txt) => setCpf(txt.replace(/\D/g, ""))}
+                onChangeText={(txt) => setCpf(cpfMask(txt))}
                 placeholder="000.000.000-00"
                 keyboardType="numeric"
                 placeholderTextColor={theme.colors.textMuted}
+                maxLength={14}
               />
 
               {/* TELEFONE */}
@@ -228,10 +245,11 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={phone}
-                onChangeText={(txt) => setPhone(txt.replace(/[^\d]/g, ""))}
-                placeholder="(xx) xxxxx-xxxx"
+                onChangeText={(txt) => setPhone(phoneMask(txt))}
+                placeholder="(47) 99999-9999"
                 keyboardType="phone-pad"
                 placeholderTextColor={theme.colors.textMuted}
+                maxLength={15}
               />
 
               {/* ENDEREÇO */}
@@ -249,12 +267,24 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(txt) => setEmail(txt.trim().toLowerCase())}
                 placeholder="seuemail@exemplo.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 placeholderTextColor={theme.colors.textMuted}
               />
+              {email.length > 0 && !isValidEmail(email) && (
+                <Text
+                  style={{
+                    color: theme.colors.danger,
+                    marginTop: 4,
+                    fontSize: 12,
+                  }}
+                >
+                  E-mail inválido
+                </Text>
+              )}
 
               <View style={styles.editButtonsRow}>
                 <Pressable
@@ -279,6 +309,9 @@ export default function ProfileScreen() {
   }
 
   // 🔹 MODO NORMAL (visualização do perfil)
+  const formattedCpf = user?.cpf ? cpfMask(user.cpf) : "—";
+  const formattedPhone = user?.phone ? phoneMask(user.phone) : "—";
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       {/* HEADER */}
@@ -316,8 +349,8 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Meus dados</Text>
 
           <View style={styles.infoCard}>
-            <InfoRow label="CPF" value={user?.cpf ?? "—"} />
-            <InfoRow label="Telefone" value={user?.phone ?? "—"} />
+            <InfoRow label="CPF" value={formattedCpf} />
+            <InfoRow label="Telefone" value={formattedPhone} />
             <InfoRow label="Endereço" value={user?.address ?? "—"} last />
           </View>
         </View>
@@ -523,7 +556,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 40, // mais espaço pra não “cortar” perto da barra
   },
   section: {
     marginBottom: 16,
@@ -594,6 +628,7 @@ const styles = StyleSheet.create({
   editContent: {
     paddingHorizontal: 16,
     paddingVertical: 20,
+    paddingBottom: 40,
   },
   editTitle: {
     fontSize: 20,

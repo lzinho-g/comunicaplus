@@ -48,9 +48,11 @@ export default function MapScreen() {
   // animação de bounce dos pins
   const pinAnimations = useRef<{ [key: string]: Animated.Value }>({}).current;
 
-  // 🔹 Região controlada do mapa
-  const [region, setRegion] = useState<Region | null>(null);
-  const [hasCenteredOnUser, setHasCenteredOnUser] = useState(false);
+  // endereço resolvido por reverse geocode (mesma ideia do feed)
+  const [addresses, setAddresses] = useState<Record<string, string>>({});
+
+  // controla se a descrição está expandida
+  const [expanded, setExpanded] = useState(false);
 
   function getPinAnim(id: string) {
     if (!pinAnimations[id]) {
@@ -77,6 +79,7 @@ export default function MapScreen() {
 
   function openCard(problem: Problem) {
     setSelected(problem);
+    setExpanded(false); // sempre fecha descrição ao trocar de pin
     Animated.timing(slideAnim, {
       toValue: 1,
       duration: 250,
@@ -91,6 +94,7 @@ export default function MapScreen() {
       useNativeDriver: true,
     }).start(() => {
       setSelected(null);
+      setExpanded(false);
     });
   }
 
@@ -127,36 +131,27 @@ export default function MapScreen() {
         const { status } =
           await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-          // sem permissão → fica na região inicial (problemas/Floripa)
-          setRegion(initialRegion);
           return;
         }
 
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        const userRegion: Region = {
+        const loc = await Location.getCurrentPositionAsync({});
+        const region: Region = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
           latitudeDelta: 0.03,
           longitudeDelta: 0.03,
         };
 
-        setRegion(userRegion);
-        mapRef.current?.animateToRegion(userRegion, 700);
-        setHasCenteredOnUser(true);
+        mapRef.current?.animateToRegion(region, 700);
       } catch (e) {
         console.log("Erro ao obter localização inicial", e);
-        setRegion(initialRegion);
       }
     })();
-  }, [initialRegion]);
+  }, []);
 
   // Ajustar mapa para caber todos os pins válidos
-  // 👉 Só faz isso se AINDA não centralizamos no usuário
   useEffect(() => {
     if (!mapRef.current || validProblems.length === 0) return;
-    if (hasCenteredOnUser) return;
 
     const coords = validProblems.map((p: Problem) => ({
       latitude: p.latitude,
@@ -164,10 +159,10 @@ export default function MapScreen() {
     }));
 
     mapRef.current.fitToCoordinates(coords, {
-      edgePadding: { top: 60, right: 60, bottom: 80, left: 60 },
+      edgePadding: { top: 60, right: 60, bottom: 120, left: 60 },
       animated: true,
     });
-  }, [validProblems, hasCenteredOnUser]);
+  }, [validProblems]);
 
   // 🔎 Se veio um focusId (clicou em "Mapa" no Feed), foca nesse problema válido
   useEffect(() => {
@@ -179,16 +174,71 @@ export default function MapScreen() {
     openCard(p);
     bouncePin(p.id);
 
-    const focusRegion: Region = {
-      latitude: p.latitude,
-      longitude: p.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-
-    setRegion(focusRegion);
-    mapRef.current?.animateToRegion(focusRegion, 300);
+    // ✅ zoom bem mais perto
+    mapRef.current?.animateToRegion(
+      {
+        latitude: p.latitude + 0.0015, // leve deslocamento pra cima
+        longitude: p.longitude,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
+      },
+      300
+    );
   }, [focusId, validProblems]);
+
+  // 🔁 Buscar endereço por reverse geocode (igual conceito do feed)
+  useEffect(() => {
+    (async () => {
+      for (const p of validProblems) {
+        if (addresses[p.id]) continue; // já tem
+
+        try {
+          const results = await Location.reverseGeocodeAsync({
+            latitude: p.latitude,
+            longitude: p.longitude,
+          });
+
+          if (results && results.length > 0) {
+            const r = results[0];
+
+            const streetPart =
+              r.street && r.name
+                ? `${r.street}, ${r.name}`
+                : r.street || r.name || "";
+            const districtPart = r.district || "";
+            const cityPart = r.city || r.subregion || "";
+
+            const pieces = [streetPart, districtPart, cityPart].filter(
+              (t) => t && t.trim().length > 0
+            );
+
+            const formatted = pieces.join(" - ");
+
+            if (formatted) {
+              setAddresses((prev) => ({
+                ...prev,
+                [p.id]: formatted,
+              }));
+            }
+          }
+        } catch {
+          // se der erro, ignora; o fallback usa bairro/cidade
+        }
+      }
+    })();
+  }, [validProblems, addresses]);
+
+  // helper pra deixar o endereço exatamente como queremos (coerente com o feed)
+  function getPrettyAddress(p: Problem): string {
+    const addrFromMap = addresses[p.id];
+    if (addrFromMap && addrFromMap.trim().length > 0) {
+      return addrFromMap;
+    }
+    if ((p as any).neighborhood && (p as any).neighborhood.trim().length > 0) {
+      return `${(p as any).neighborhood}, ${p.city}`;
+    }
+    return p.city;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -197,47 +247,44 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        region={region ?? initialRegion}
-        onRegionChangeComplete={(r) => setRegion(r)}
       >
         {validProblems.map((p: Problem) => {
           const anim = getPinAnim(p.id);
           const isSelected = selected?.id === p.id;
 
           return (
-            <Animated.View
+            <Marker
               key={p.id}
-              style={{ transform: [{ translateY: anim }] }}
-            >
-              <Marker
-                coordinate={{
-                  latitude: p.latitude,
-                  longitude: p.longitude,
-                }}
-                onPress={() => {
-                  bouncePin(p.id);
-                  openCard(p);
+              coordinate={{
+                latitude: p.latitude,
+                longitude: p.longitude,
+              }}
+              onPress={() => {
+                bouncePin(p.id);
+                openCard(p);
 
-                  const focusRegion: Region = {
-                    latitude: p.latitude,
+                // ✅ aproxima bastante quando clica no pin
+                mapRef.current?.animateToRegion(
+                  {
+                    latitude: p.latitude + 0.0015,
                     longitude: p.longitude,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
-                  };
-
-                  setRegion(focusRegion);
-                  mapRef.current?.animateToRegion(focusRegion, 250);
-                }}
-                zIndex={isSelected ? 999 : 1}
-              >
-                {/* PIN GRANDE PERSONALIZADO */}
+                    latitudeDelta: 0.008,
+                    longitudeDelta: 0.008,
+                  },
+                  250
+                );
+              }}
+              zIndex={isSelected ? 999 : 1}
+            >
+              {/* PIN PERSONALIZADO ANIMADO */}
+              <Animated.View style={{ transform: [{ translateY: anim }] }}>
                 <Image
                   source={isSelected ? pinRed : pinBlue}
                   style={{ width: 48, height: 48 }}
                   resizeMode="contain"
                 />
-              </Marker>
-            </Animated.View>
+              </Animated.View>
+            </Marker>
           );
         })}
       </MapView>
@@ -264,14 +311,36 @@ export default function MapScreen() {
             {selected.votes === 1 ? "" : "s"}
           </Text>
 
+          {/* Endereço igual ao feed (com reverse geocode + fallback bairro/cidade) */}
           <Text style={styles.cardInfo}>
-            {selected.city} • {selected.status}
+            <Text style={{ fontWeight: "700" }}>Endereço: </Text>
+            {getPrettyAddress(selected)}
           </Text>
 
+          {/* Status */}
+          <Text style={styles.cardInfo}>{selected.status}</Text>
+
+          {/* Descrição com "Ver detalhes" igual ao feed */}
           {selected.description ? (
-            <Text style={styles.cardDesc} numberOfLines={3}>
-              {selected.description}
-            </Text>
+            <>
+              <Text
+                style={styles.cardDesc}
+                numberOfLines={expanded ? 0 : 3}
+              >
+                {selected.description}
+              </Text>
+
+              {selected.description.length > 80 && (
+                <Pressable
+                  style={styles.moreBtn}
+                  onPress={() => setExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.moreText}>
+                    {expanded ? "Ver menos" : "Ver detalhes do registro"}
+                  </Text>
+                </Pressable>
+              )}
+            </>
           ) : null}
 
           <View style={styles.row}>
@@ -320,17 +389,28 @@ const styles = StyleSheet.create({
   cardInfo: {
     fontSize: 13,
     color: theme.colors.textMuted,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   cardDesc: {
     fontSize: 13,
     color: theme.colors.text,
-    marginBottom: 12,
+    marginTop: 6,
+  },
+  moreBtn: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+  },
+  moreText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: theme.colors.primary,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
+    marginTop: 12,
   },
   button: {
     flex: 1,

@@ -17,14 +17,37 @@ import { useNavigation } from "@react-navigation/native";
 import { theme } from "../theme/theme";
 import { useAuth } from "../state/useAuth";
 
+/* ---------- HELPERS (mesmos do perfil) ---------- */
+
+function onlyLetters(text: string) {
+  return text.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ ]/g, "");
+}
+
+function cpfMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+}
+
+function phoneMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2");
+}
+
 function isValidEmail(email: string) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  return re.test(email.toLowerCase());
 }
 
 function hasLetterAndNumber(password: string) {
   return /[A-Za-z]/.test(password) && /\d/.test(password);
 }
+
+/* ------------------------------------------------ */
 
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
@@ -40,8 +63,6 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     const trimmedName = name.trim();
-    const trimmedCpf = cpf.trim();
-    const trimmedPhone = phone.trim();
     const trimmedAddress = address.trim();
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
@@ -49,8 +70,8 @@ export default function RegisterScreen() {
 
     if (
       !trimmedName ||
-      !trimmedCpf ||
-      !trimmedPhone ||
+      !cpf ||
+      !phone ||
       !trimmedAddress ||
       !trimmedEmail ||
       !trimmedPassword ||
@@ -59,16 +80,16 @@ export default function RegisterScreen() {
       return Alert.alert("Atenção", "Preencha todos os campos obrigatórios.");
     }
 
-    // Nome: evita caracteres muito estranhos
-    if (/[^\wÀ-ÖØ-öø-ÿ\s.,-]/.test(trimmedName)) {
+    // Nome: apenas letras e espaços
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ ]+$/.test(trimmedName) || trimmedName.length < 3) {
       return Alert.alert(
         "Nome inválido",
-        "Evite caracteres especiais estranhos no nome."
+        "Use apenas letras e espaços (mínimo 3 caracteres)."
       );
     }
 
-    // CPF: apenas dígitos e exatamente 11 números
-    const cpfDigits = trimmedCpf.replace(/\D/g, "");
+    // CPF: limpa máscara e valida 11 dígitos
+    const cpfDigits = cpf.replace(/\D/g, "");
     if (cpfDigits.length !== 11) {
       return Alert.alert(
         "CPF inválido",
@@ -76,8 +97,8 @@ export default function RegisterScreen() {
       );
     }
 
-    // Telefone: apenas dígitos, 10 ou 11 números (com DDD)
-    const phoneDigits = trimmedPhone.replace(/\D/g, "");
+    // Telefone: limpa máscara e valida 10 ou 11 dígitos
+    const phoneDigits = phone.replace(/\D/g, "");
     if (phoneDigits.length < 10 || phoneDigits.length > 11) {
       return Alert.alert(
         "Telefone inválido",
@@ -156,7 +177,7 @@ export default function RegisterScreen() {
               placeholder="Seu nome"
               placeholderTextColor={theme.colors.textMuted}
               value={name}
-              onChangeText={setName}
+              onChangeText={(txt) => setName(onlyLetters(txt))}
               autoCapitalize="words"
               returnKeyType="next"
               maxLength={80}
@@ -168,13 +189,13 @@ export default function RegisterScreen() {
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Somente números"
+              placeholder="000.000.000-00"
               placeholderTextColor={theme.colors.textMuted}
               value={cpf}
-              onChangeText={(txt) => setCpf(txt.replace(/\D/g, ""))}
+              onChangeText={(txt) => setCpf(cpfMask(txt))}
               keyboardType="numeric"
               returnKeyType="next"
-              maxLength={11}
+              maxLength={14} // com máscara
             />
 
             {/* TELEFONE */}
@@ -183,13 +204,13 @@ export default function RegisterScreen() {
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="(xx) xxxxx-xxxx"
+              placeholder="(47) 99999-9999"
               placeholderTextColor={theme.colors.textMuted}
               value={phone}
-              onChangeText={(txt) => setPhone(txt.replace(/[^\d]/g, ""))}
+              onChangeText={(txt) => setPhone(phoneMask(txt))}
               keyboardType="phone-pad"
               returnKeyType="next"
-              maxLength={11}
+              maxLength={15} // com máscara
             />
 
             {/* ENDEREÇO */}
@@ -215,7 +236,7 @@ export default function RegisterScreen() {
               placeholder="seuemail@exemplo.com"
               placeholderTextColor={theme.colors.textMuted}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(txt) => setEmail(txt.trim().toLowerCase())}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -223,6 +244,17 @@ export default function RegisterScreen() {
               returnKeyType="next"
               maxLength={80}
             />
+            {email.length > 0 && !isValidEmail(email) && (
+              <Text
+                style={{
+                  color: theme.colors.danger,
+                  marginTop: 4,
+                  fontSize: 12,
+                }}
+              >
+                E-mail inválido
+              </Text>
+            )}
 
             {/* SENHA */}
             <Text style={styles.label}>
