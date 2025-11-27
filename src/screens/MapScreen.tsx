@@ -7,8 +7,9 @@ import {
   Animated,
   Image,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Region } from "react-native-maps";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import * as Location from "expo-location";
 import { useProblems } from "../state/useProblems";
 import type { Problem } from "../state/useProblems";
 import { theme } from "../theme/theme";
@@ -46,6 +47,10 @@ export default function MapScreen() {
 
   // animação de bounce dos pins
   const pinAnimations = useRef<{ [key: string]: Animated.Value }>({}).current;
+
+  // 🔹 Região controlada do mapa
+  const [region, setRegion] = useState<Region | null>(null);
+  const [hasCenteredOnUser, setHasCenteredOnUser] = useState(false);
 
   function getPinAnim(id: string) {
     if (!pinAnimations[id]) {
@@ -115,9 +120,43 @@ export default function MapScreen() {
     };
   }, [validProblems]);
 
+  // 📍 Ao abrir a tela, tentar centralizar no usuário
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          // sem permissão → fica na região inicial (problemas/Floripa)
+          setRegion(initialRegion);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        const userRegion: Region = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        };
+
+        setRegion(userRegion);
+        mapRef.current?.animateToRegion(userRegion, 700);
+        setHasCenteredOnUser(true);
+      } catch (e) {
+        console.log("Erro ao obter localização inicial", e);
+        setRegion(initialRegion);
+      }
+    })();
+  }, [initialRegion]);
+
   // Ajustar mapa para caber todos os pins válidos
+  // 👉 Só faz isso se AINDA não centralizamos no usuário
   useEffect(() => {
     if (!mapRef.current || validProblems.length === 0) return;
+    if (hasCenteredOnUser) return;
 
     const coords = validProblems.map((p: Problem) => ({
       latitude: p.latitude,
@@ -128,7 +167,7 @@ export default function MapScreen() {
       edgePadding: { top: 60, right: 60, bottom: 80, left: 60 },
       animated: true,
     });
-  }, [validProblems]);
+  }, [validProblems, hasCenteredOnUser]);
 
   // 🔎 Se veio um focusId (clicou em "Mapa" no Feed), foca nesse problema válido
   useEffect(() => {
@@ -137,19 +176,18 @@ export default function MapScreen() {
     const p = validProblems.find((pr) => pr.id === focusId);
     if (!p) return;
 
-    // abre o card, centraliza e faz o pin "pular"
     openCard(p);
     bouncePin(p.id);
 
-    mapRef.current?.animateToRegion(
-      {
-        latitude: p.latitude,
-        longitude: p.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      300
-    );
+    const focusRegion: Region = {
+      latitude: p.latitude,
+      longitude: p.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+
+    setRegion(focusRegion);
+    mapRef.current?.animateToRegion(focusRegion, 300);
   }, [focusId, validProblems]);
 
   return (
@@ -159,6 +197,8 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
+        region={region ?? initialRegion}
+        onRegionChangeComplete={(r) => setRegion(r)}
       >
         {validProblems.map((p: Problem) => {
           const anim = getPinAnim(p.id);
@@ -178,17 +218,17 @@ export default function MapScreen() {
                   bouncePin(p.id);
                   openCard(p);
 
-                  // Centralizar no pin selecionado
-                  mapRef.current?.animateToRegion(
-                    {
-                      latitude: p.latitude,
-                      longitude: p.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    },
-                    250
-                  );
+                  const focusRegion: Region = {
+                    latitude: p.latitude,
+                    longitude: p.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  };
+
+                  setRegion(focusRegion);
+                  mapRef.current?.animateToRegion(focusRegion, 250);
                 }}
+                zIndex={isSelected ? 999 : 1}
               >
                 {/* PIN GRANDE PERSONALIZADO */}
                 <Image

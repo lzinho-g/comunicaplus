@@ -14,10 +14,17 @@ import {
   Keyboard,
   Image,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../state/useAuth";
 import { theme } from "../theme/theme";
+
+// 🔹 Validação simples de e-mail
+function isValidEmail(email: string) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
 
 export default function ProfileScreen() {
   const { user, logout, deleteAccount, updateProfile } = useAuth();
@@ -82,27 +89,72 @@ export default function ProfileScreen() {
     ]);
   }
 
+  // 🔹 SALVAR EDIÇÃO COM VALIDAÇÃO
   async function handleSaveEdit() {
+    const trimmedName = name.trim();
+    const trimmedCpf = cpf.trim();
+    const trimmedPhone = phone.trim();
+    const trimmedAddress = address.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
     if (
-      !name.trim() ||
-      !cpf.trim() ||
-      !phone.trim() ||
-      !address.trim() ||
-      !email.trim()
+      !trimmedName ||
+      !trimmedCpf ||
+      !trimmedPhone ||
+      !trimmedAddress ||
+      !trimmedEmail
     ) {
       return Alert.alert("Atenção", "Preencha todos os campos.");
     }
 
-    await updateProfile({
-      name: name.trim(),
-      cpf: cpf.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      email: email.trim().toLowerCase(),
-    });
+    // Nome: evita caracteres muito estranhos
+    if (/[^\wÀ-ÖØ-öø-ÿ\s.,-]/.test(trimmedName)) {
+      return Alert.alert(
+        "Nome inválido",
+        "Evite caracteres especiais estranhos no nome."
+      );
+    }
 
-    Alert.alert("Sucesso", "Perfil atualizado com sucesso!");
-    setEditing(false);
+    // CPF: só dígitos e exatamente 11 números
+    const cpfDigits = trimmedCpf.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) {
+      return Alert.alert(
+        "CPF inválido",
+        "Informe um CPF com exatamente 11 números."
+      );
+    }
+
+    // Telefone: só dígitos e 10 ou 11 números
+    const phoneDigits = trimmedPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      return Alert.alert(
+        "Telefone inválido",
+        "Informe um telefone com DDD (10 ou 11 dígitos)."
+      );
+    }
+
+    // E-mail
+    if (!isValidEmail(trimmedEmail)) {
+      return Alert.alert("E-mail inválido", "Informe um e-mail válido.");
+    }
+
+    try {
+      await updateProfile({
+        name: trimmedName,
+        cpf: cpfDigits,
+        phone: phoneDigits,
+        address: trimmedAddress,
+        email: trimmedEmail,
+      });
+
+      Alert.alert("Sucesso", "Perfil atualizado com sucesso!");
+      setEditing(false);
+    } catch (e: any) {
+      Alert.alert(
+        "Erro",
+        e?.message ?? "Não foi possível atualizar seu perfil."
+      );
+    }
   }
 
   function handleCancelEdit() {
@@ -165,7 +217,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={cpf}
-                onChangeText={setCpf}
+                onChangeText={(txt) => setCpf(txt.replace(/\D/g, ""))}
                 placeholder="000.000.000-00"
                 keyboardType="numeric"
                 placeholderTextColor={theme.colors.textMuted}
@@ -176,7 +228,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(txt) => setPhone(txt.replace(/[^\d]/g, ""))}
                 placeholder="(xx) xxxxx-xxxx"
                 keyboardType="phone-pad"
                 placeholderTextColor={theme.colors.textMuted}

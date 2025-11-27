@@ -169,6 +169,7 @@ export default function NewProblemScreen() {
                 value={value}
                 onChangeText={onChange}
                 returnKeyType="next"
+                maxLength={80} // limite de título
               />
             )}
           />
@@ -189,11 +190,7 @@ export default function NewProblemScreen() {
                   onPress={() => setCategoryOpen((prev) => !prev)}
                 >
                   <Text
-                    style={
-                      value
-                        ? styles.inputText
-                        : styles.placeholderText
-                    }
+                    style={value ? styles.inputText : styles.placeholderText}
                   >
                     {value || "Selecione a categoria"}
                   </Text>
@@ -236,6 +233,7 @@ export default function NewProblemScreen() {
                 value={value}
                 onChangeText={onChange}
                 returnKeyType="next"
+                maxLength={60} // limite de cidade
               />
             )}
           />
@@ -258,6 +256,7 @@ export default function NewProblemScreen() {
                 value={value ?? ""}
                 onChangeText={onChange}
                 returnKeyType="next"
+                maxLength={60} // limite de bairro
               />
             )}
           />
@@ -275,6 +274,7 @@ export default function NewProblemScreen() {
                 multiline
                 value={value}
                 onChangeText={onChange}
+                maxLength={500} // limite de descrição
               />
             )}
           />
@@ -306,7 +306,8 @@ export default function NewProblemScreen() {
             />
           </MapView>
 
-          <Text style={{ textAlign: "center", marginBottom: 6 }}>
+          {/* Coordenadas bem visíveis */}
+          <Text style={styles.coordText}>
             {coord.latitude.toFixed(5)}, {coord.longitude.toFixed(5)}
           </Text>
 
@@ -408,4 +409,16 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: theme.colors.primary, marginTop: 12 },
   btnText: { color: "#fff", fontWeight: "700" },
   error: { color: theme.colors.danger, fontSize: 12, marginTop: 4 },
+
+  // texto da coordenada mais visível
+  coordText: {
+    textAlign: "center",
+    marginBottom: 6,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
 });

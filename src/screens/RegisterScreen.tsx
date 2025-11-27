@@ -17,6 +17,15 @@ import { useNavigation } from "@react-navigation/native";
 import { theme } from "../theme/theme";
 import { useAuth } from "../state/useAuth";
 
+function isValidEmail(email: string) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
+
+function hasLetterAndNumber(password: string) {
+  return /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
   const { register } = useAuth();
@@ -30,35 +39,92 @@ export default function RegisterScreen() {
   const [confirm, setConfirm] = useState("");
 
   async function handleRegister() {
+    const trimmedName = name.trim();
+    const trimmedCpf = cpf.trim();
+    const trimmedPhone = phone.trim();
+    const trimmedAddress = address.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    const trimmedConfirm = confirm.trim();
+
     if (
-      !name.trim() ||
-      !cpf.trim() ||
-      !phone.trim() ||
-      !address.trim() ||
-      !email.trim() ||
-      !password ||
-      !confirm
+      !trimmedName ||
+      !trimmedCpf ||
+      !trimmedPhone ||
+      !trimmedAddress ||
+      !trimmedEmail ||
+      !trimmedPassword ||
+      !trimmedConfirm
     ) {
       return Alert.alert("Atenção", "Preencha todos os campos obrigatórios.");
     }
 
-    if (password !== confirm) {
+    // Nome: evita caracteres muito estranhos
+    if (/[^\wÀ-ÖØ-öø-ÿ\s.,-]/.test(trimmedName)) {
+      return Alert.alert(
+        "Nome inválido",
+        "Evite caracteres especiais estranhos no nome."
+      );
+    }
+
+    // CPF: apenas dígitos e exatamente 11 números
+    const cpfDigits = trimmedCpf.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) {
+      return Alert.alert(
+        "CPF inválido",
+        "O CPF deve conter exatamente 11 dígitos numéricos."
+      );
+    }
+
+    // Telefone: apenas dígitos, 10 ou 11 números (com DDD)
+    const phoneDigits = trimmedPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      return Alert.alert(
+        "Telefone inválido",
+        "Informe um telefone com DDD (10 ou 11 dígitos)."
+      );
+    }
+
+    // E-mail
+    if (!isValidEmail(trimmedEmail)) {
+      return Alert.alert("E-mail inválido", "Informe um e-mail válido.");
+    }
+
+    // Regras de senha
+    if (trimmedPassword.length < 6) {
+      return Alert.alert(
+        "Senha muito curta",
+        "A senha deve ter pelo menos 6 caracteres."
+      );
+    }
+
+    if (!hasLetterAndNumber(trimmedPassword)) {
+      return Alert.alert(
+        "Senha fraca",
+        "Use letras e números na senha para deixá-la mais forte."
+      );
+    }
+
+    if (trimmedPassword !== trimmedConfirm) {
       return Alert.alert("Atenção", "As senhas não conferem.");
     }
 
     try {
       await register({
-        name: name.trim(),
-        cpf: cpf.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        email: email.trim().toLowerCase(),
-        password,
+        name: trimmedName,
+        cpf: cpfDigits,
+        phone: phoneDigits,
+        address: trimmedAddress,
+        email: trimmedEmail,
+        password: trimmedPassword,
       });
-      // navega para login ou direto pro app, depende do seu fluxo:
+
       navigation.navigate("Login");
     } catch (e: any) {
-      Alert.alert("Erro", e?.message ?? "Não foi possível criar sua conta.");
+      Alert.alert(
+        "Erro",
+        e?.message ?? "Não foi possível criar sua conta."
+      );
     }
   }
 
@@ -91,7 +157,9 @@ export default function RegisterScreen() {
               placeholderTextColor={theme.colors.textMuted}
               value={name}
               onChangeText={setName}
+              autoCapitalize="words"
               returnKeyType="next"
+              maxLength={80}
             />
 
             {/* CPF */}
@@ -103,9 +171,10 @@ export default function RegisterScreen() {
               placeholder="Somente números"
               placeholderTextColor={theme.colors.textMuted}
               value={cpf}
-              onChangeText={setCpf}
+              onChangeText={(txt) => setCpf(txt.replace(/\D/g, ""))}
               keyboardType="numeric"
               returnKeyType="next"
+              maxLength={11}
             />
 
             {/* TELEFONE */}
@@ -117,9 +186,10 @@ export default function RegisterScreen() {
               placeholder="(xx) xxxxx-xxxx"
               placeholderTextColor={theme.colors.textMuted}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(txt) => setPhone(txt.replace(/[^\d]/g, ""))}
               keyboardType="phone-pad"
               returnKeyType="next"
+              maxLength={11}
             />
 
             {/* ENDEREÇO */}
@@ -133,6 +203,7 @@ export default function RegisterScreen() {
               value={address}
               onChangeText={setAddress}
               returnKeyType="next"
+              maxLength={120}
             />
 
             {/* EMAIL */}
@@ -146,8 +217,11 @@ export default function RegisterScreen() {
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
+              textContentType="emailAddress"
               returnKeyType="next"
+              maxLength={80}
             />
 
             {/* SENHA */}
@@ -156,12 +230,16 @@ export default function RegisterScreen() {
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="••••••••"
+              placeholder="Mínimo 6 caracteres, letras e números"
               placeholderTextColor={theme.colors.textMuted}
               secureTextEntry
               value={password}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="newPassword"
               onChangeText={setPassword}
               returnKeyType="next"
+              maxLength={64}
             />
 
             {/* CONFIRMAR SENHA */}
@@ -175,7 +253,11 @@ export default function RegisterScreen() {
               secureTextEntry
               value={confirm}
               onChangeText={setConfirm}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
               returnKeyType="done"
+              maxLength={64}
             />
 
             {/* BOTÃO CRIAR CONTA */}
@@ -183,22 +265,21 @@ export default function RegisterScreen() {
               <Text style={styles.primaryBtnText}>Criar conta</Text>
             </Pressable>
 
-            {/* LINK "JÁ TEM CONTA?" – um pouco mais acima, longe da barra */}
+            {/* LINK "JÁ TEM CONTA?" */}
             <Pressable
               style={styles.bottomLinkWrapper}
               onPress={() => navigation.navigate("Login")}
             >
               <Text style={styles.bottomLinkText}>
-                Já tem conta? <Text style={styles.bottomLinkHighlight}>Entrar</Text>
+                Já tem conta?{" "}
+                <Text style={styles.bottomLinkHighlight}>Entrar</Text>
               </Text>
             </Pressable>
 
-            {/* espaço extra para não colar na borda do aparelho */}
             <View style={{ height: 24 }} />
 
             <Text style={styles.requiredInfo}>* Campos obrigatórios</Text>
 
-            {/* espaço final grande para garantir que nada fique escondido */}
             <View style={{ height: 40 }} />
           </ScrollView>
         </TouchableWithoutFeedback>
@@ -211,7 +292,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 40, // ajuda a afastar do fundo
+    paddingBottom: 40,
   },
   title: {
     fontSize: 22,

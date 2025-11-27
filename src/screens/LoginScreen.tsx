@@ -24,12 +24,15 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
       return Alert.alert("Atenção", "Preencha e-mail e senha.");
     }
 
     setLoading(true);
-    const ok = await login(email, password);
+    const ok = await login(trimmedEmail, trimmedPassword);
     setLoading(false);
 
     if (!ok) {
@@ -53,7 +56,9 @@ export default function LoginScreen() {
             <Text style={styles.brand}>Comunica+</Text>
           </View>
 
-          <Text style={styles.subtitle}>Entre para acompanhar e registrar problemas na sua cidade.</Text>
+          <Text style={styles.subtitle}>
+            Entre para acompanhar e registrar problemas na sua cidade.
+          </Text>
 
           {/* E-mail */}
           <Text style={styles.label}>E-mail</Text>
@@ -63,6 +68,8 @@ export default function LoginScreen() {
             placeholderTextColor={theme.colors.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="emailAddress"
             value={email}
             onChangeText={setEmail}
           />
@@ -75,6 +82,9 @@ export default function LoginScreen() {
             placeholderTextColor={theme.colors.textMuted}
             secureTextEntry
             value={password}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
             onChangeText={setPassword}
           />
 
@@ -84,7 +94,9 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            <Text style={styles.btnText}>{loading ? "Entrando..." : "Entrar"}</Text>
+            <Text style={styles.btnText}>
+              {loading ? "Entrando..." : "Entrar"}
+            </Text>
           </Pressable>
 
           {/* Link para cadastro */}
@@ -93,7 +105,8 @@ export default function LoginScreen() {
             onPress={() => navigation.navigate("Register")}
           >
             <Text style={styles.link}>
-              Não tem conta? <Text style={styles.linkStrong}>Criar cadastro</Text>
+              Não tem conta?{" "}
+              <Text style={styles.linkStrong}>Criar cadastro</Text>
             </Text>
           </Pressable>
         </View>
