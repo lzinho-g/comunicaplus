@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,32 +6,51 @@ import {
   Image,
   Pressable,
   StyleSheet,
+  TextInput,
+  Alert,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { useProblems } from "../state/useProblems";
+import { useAuth } from "../state/useAuth";
 import { theme } from "../theme/theme";
+
+// helper para busca sem acento / case-insensitive
+function normalize(str: string | undefined | null) {
+  return (str ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+// normaliza descrição: remove linhas em branco e espaços exagerados
+function normalizeDescription(text: string | undefined | null) {
+  return (text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join(" ");
+}
 
 export default function FeedScreen() {
   const { problems, vote } = useProblems();
+  const { user } = useAuth();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+
+  const listRef = useRef<FlatList<any>>(null);
 
   const [orderBy, setOrderBy] = useState<"recent" | "votes">("recent");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [addresses, setAddresses] = useState<Record<string, string>>({});
 
-  const items = useMemo(() => {
-    const arr = [...problems];
-    if (orderBy === "recent") {
-      arr.sort((a, b) => b.createdAt - a.createdAt);
-    } else {
-      arr.sort((a, b) => b.votes - a.votes);
-    }
-    return arr;
-  }, [problems, orderBy]);
+  // id enviado pelo mapa
+  const focusId: string | undefined = route.params?.focusId;
 
-  // Carregar aspectRatio das imagens
+  // carregar aspectRatio das imagens
   useEffect(() => {
     problems.forEach((p) => {
       if (p.image && !aspectRatios[p.id]) {
@@ -51,22 +70,29 @@ export default function FeedScreen() {
     });
   }, [problems, aspectRatios]);
 
-  // Buscar endereço a partir das coordenadas (reverse geocode)
+  // reverse geocode para endereço
   useEffect(() => {
     (async () => {
       for (const p of problems) {
-        if (addresses[p.id]) continue; // já tem
+        if (addresses[p.id]) continue;
+        if (
+          typeof p.latitude !== "number" ||
+          Number.isNaN(p.latitude) ||
+          typeof p.longitude !== "number" ||
+          Number.isNaN(p.longitude)
+        ) {
+          continue;
+        }
 
         try {
-          const results = await Location.reverseGeocodeAsync({
+          const res = await Location.reverseGeocodeAsync({
             latitude: p.latitude,
             longitude: p.longitude,
           });
 
-          if (results && results.length > 0) {
-            const r = results[0];
+          if (res && res.length > 0) {
+            const r = res[0];
 
-            // Monta um endereço amigável
             const streetPart =
               r.street && r.name
                 ? `${r.street}, ${r.name}`
@@ -74,27 +100,61 @@ export default function FeedScreen() {
             const districtPart = r.district || "";
             const cityPart = r.city || r.subregion || "";
 
-            const pieces = [streetPart, districtPart, cityPart].filter(
+            const parts = [streetPart, districtPart, cityPart].filter(
               (t) => t && t.trim().length > 0
             );
-
-            const formatted = pieces.join(" - ");
+            const formatted = parts.join(" - ");
 
             if (formatted) {
-              setAddresses((prev) => ({
-                ...prev,
-                [p.id]: formatted,
-              }));
+              setAddresses((prev) => ({ ...prev, [p.id]: formatted }));
             }
           }
         } catch {
-          // se der erro, simplesmente não salva nada e usa o fallback (bairro/cidade)
+          // ignora erro, usa fallback
         }
       }
     })();
   }, [problems, addresses]);
 
-  if (!items.length) {
+  function getPrettyAddress(p: any): string {
+    const addrFromMap = addresses[p.id];
+    if (addrFromMap && addrFromMap.trim().length > 0) {
+      return addrFromMap;
+    }
+    if (p.neighborhood && p.neighborhood.trim().length > 0) {
+      return `${p.neighborhood}, ${p.city}`;
+    }
+    return p.city;
+  }
+
+  const items = useMemo(() => {
+    let arr = [...problems];
+
+    const qNorm = normalize(search.trim());
+    if (qNorm.length > 0) {
+      arr = arr.filter((p) => {
+        const addrNorm = normalize(getPrettyAddress(p));
+        const descNorm = normalize(normalizeDescription(p.description));
+        return (
+          normalize(p.title).includes(qNorm) ||
+          normalize(p.city).includes(qNorm) ||
+          normalize(p.neighborhood).includes(qNorm) ||
+          descNorm.includes(qNorm) ||
+          addrNorm.includes(qNorm)
+        );
+      });
+    }
+
+    if (orderBy === "recent") {
+      arr.sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      arr.sort((a, b) => b.votes - a.votes);
+    }
+    return arr;
+  }, [problems, orderBy, search, addresses]);
+
+  // quando não existe nenhum problema salvo
+  if (!problems.length) {
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyText}>
@@ -104,13 +164,45 @@ export default function FeedScreen() {
     );
   }
 
+  // 🔍 quando vier do mapa com focusId, rola até o card e (opcional) expande
+  useEffect(() => {
+    if (!focusId || !items.length) return;
+
+    setSearch("");
+    setSearchOpen(false);
+    setOrderBy("recent");
+    setExpandedId(focusId);
+
+    const index = items.findIndex((p) => p.id === focusId);
+    if (index === -1) return;
+
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.1,
+      });
+
+      navigation.setParams({ focusId: undefined });
+    }, 100);
+  }, [focusId, items, navigation]);
+
   function handleGoToMap(id: string) {
     navigation.navigate("Mapa", { focusId: id });
   }
 
+  function handleToggleSearch() {
+    if (searchOpen) {
+      setSearch("");
+      setSearchOpen(false);
+    } else {
+      setSearchOpen(true);
+    }
+  }
+
   return (
     <View style={{ flex: 1, padding: 12, backgroundColor: theme.colors.bg }}>
-      {/* Chips de ordenação */}
+      {/* Chips de ordenação + buscar */}
       <View style={styles.row}>
         <Pressable
           onPress={() => setOrderBy("recent")}
@@ -139,69 +231,125 @@ export default function FeedScreen() {
             Mais votados
           </Text>
         </Pressable>
+
+        <Pressable
+          onPress={handleToggleSearch}
+          style={[styles.chip, searchOpen && styles.chipActive]}
+        >
+          <Text
+            style={[
+              styles.chipText,
+              searchOpen && styles.chipTextActive,
+            ]}
+          >
+            Buscar
+          </Text>
+        </Pressable>
       </View>
 
-      {/* Lista */}
+      {searchOpen && (
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por rua, bairro, cidade..."
+          placeholderTextColor={theme.colors.textMuted}
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+        />
+      )}
+
       <FlatList
+        ref={listRef}
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 24 }}
         renderItem={({ item }) => {
           const ratio = aspectRatios[item.id];
-          const isVertical = ratio && ratio < 1;
+          const address = getPrettyAddress(item);
 
-          // endereço vindo do mapa, se existir; senão, usa bairro + cidade
-          const addressFromMap = addresses[item.id];
-          const fallbackAddress = item.neighborhood
-            ? `${item.neighborhood}, ${item.city}`
-            : item.city;
-          const addressToShow = addressFromMap || fallbackAddress;
-
-          const desc = item.description ?? "";
-          const hasLongDescription = desc.length > 90;
+          const normalizedDesc = normalizeDescription(item.description);
+          const isExpanded = expandedId === item.id;
+          const showMoreButton = normalizedDesc.length > 80;
+          const isOpen = String(item.status).toLowerCase() === "aberto";
 
           return (
             <View style={styles.card}>
               <Text style={styles.title}>{item.title}</Text>
 
-              {/* Endereço completo */}
-              <Text style={styles.meta}>
-                <Text style={{ fontWeight: "700" }}>Endereço: </Text>
-                {addressToShow}
-              </Text>
-
-              {/* Status + data */}
-              <Text style={styles.meta}>
-                {item.status} • {new Date(item.createdAt).toLocaleString()}
-              </Text>
-
-              {/* Imagem com aspectRatio correto + verticais centralizadas */}
-              {item.image && (
-                <View style={styles.imageWrapper}>
-                  <Image
-                    source={{ uri: item.image }}
-                    style={[
-                      isVertical ? styles.imgVertical : styles.imgHorizontal,
-                      ratio ? { aspectRatio: ratio } : {},
-                    ]}
-                    resizeMode={isVertical ? "contain" : "cover"}
-                  />
+              {isOpen && (
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusBadgeText}>Aberto</Text>
                 </View>
               )}
 
-              {/* Descrição: se pequena mostra tudo, se grande mostra botão */}
-              {desc.length > 0 && (
+              <Text style={styles.meta}>
+                {address} • {new Date(item.createdAt).toLocaleString()}
+              </Text>
+
+              {item.image && (
+                <View style={styles.imageWrapper}>
+                  {(() => {
+                    const aspect = ratio;
+                    const isVertical = typeof aspect === "number" && aspect < 1;
+
+                    if (isVertical) {
+                      return (
+                        <Image
+                          source={{ uri: item.image }}
+                          style={{
+                            width: "65%",
+                            alignSelf: "center",
+                            aspectRatio: aspect,
+                            maxHeight: 260,
+                            borderRadius: 8,
+                          }}
+                          resizeMode="cover"
+                        />
+                      );
+                    }
+
+                    if (typeof aspect === "number") {
+                      return (
+                        <Image
+                          source={{ uri: item.image }}
+                          style={{
+                            width: "100%",
+                            aspectRatio: aspect,
+                            maxHeight: 260,
+                            borderRadius: 8,
+                          }}
+                          resizeMode="cover"
+                        />
+                      );
+                    }
+
+                    return (
+                      <Image
+                        source={{ uri: item.image }}
+                        style={{
+                          width: "100%",
+                          height: 180,
+                          maxHeight: 260,
+                          borderRadius: 8,
+                        }}
+                        resizeMode="cover"
+                      />
+                    );
+                  })()}
+                </View>
+              )}
+
+              {normalizedDesc ? (
                 <>
                   <Text
-                    numberOfLines={
-                      hasLongDescription && expandedId !== item.id ? 3 : 0
-                    }
                     style={styles.description}
+                    numberOfLines={isExpanded ? 0 : 3}
+                    ellipsizeMode="tail"
                   >
-                    {desc}
+                    {normalizedDesc}
                   </Text>
 
-                  {hasLongDescription && (
+                  {showMoreButton && (
                     <Pressable
                       style={styles.moreBtn}
                       onPress={() =>
@@ -211,14 +359,14 @@ export default function FeedScreen() {
                       }
                     >
                       <Text style={styles.moreText}>
-                        {expandedId === item.id
+                        {isExpanded
                           ? "Ver menos"
                           : "Ver detalhes do registro"}
                       </Text>
                     </Pressable>
                   )}
                 </>
-              )}
+              ) : null}
 
               <View style={styles.rowBetween}>
                 <Text style={styles.coords}>
@@ -235,16 +383,48 @@ export default function FeedScreen() {
 
                   <Pressable
                     style={styles.voteBtn}
-                    onPress={() => vote(item.id)}
+                    onPress={async () => {
+                      const userId = user?.email ?? null;
+                      if (!userId) {
+                        Alert.alert(
+                          "Atenção",
+                          "Você precisa estar logado para votar."
+                        );
+                        return;
+                      }
+
+                      const ok = await vote(item.id, userId);
+                      if (!ok) {
+                        Alert.alert(
+                          "Voto não permitido",
+                          "Você já votou neste problema."
+                        );
+                      }
+                    }}
                   >
-                    <Text style={styles.voteText}>
-                      Votar {item.votes}
-                    </Text>
+                    <Text style={styles.voteText}>Votar {item.votes}</Text>
                   </Pressable>
                 </View>
               </View>
             </View>
           );
+        }}
+        ListEmptyComponent={
+          search.trim().length > 0 ? (
+            <View style={styles.emptySearch}>
+              <Text style={styles.emptySearchText}>
+                Nenhum problema encontrado para "{search.trim()}".
+              </Text>
+            </View>
+          ) : null
+        }
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }, 100);
         }}
       />
     </View>
@@ -263,24 +443,39 @@ const styles = StyleSheet.create({
 
   row: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     marginBottom: 10,
   },
 
   chip: {
-    paddingHorizontal: 12,
+    flex: 1,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: theme.radius,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.chip,
+    alignItems: "center",
+    justifyContent: "center",
   },
   chipActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  chipText: { color: theme.colors.text, fontWeight: "700" },
+  chipText: { color: theme.colors.text, fontWeight: "700", fontSize: 13 },
   chipTextActive: { color: "#fff" },
+
+  searchInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.text,
+    fontSize: 13,
+  },
 
   card: {
     backgroundColor: theme.colors.card,
@@ -292,25 +487,30 @@ const styles = StyleSheet.create({
   },
 
   title: { fontSize: 16, fontWeight: "800", color: theme.colors.text },
-  meta: { color: theme.colors.textMuted, marginTop: 4 },
+
+  statusBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  statusBadgeText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  meta: { color: theme.colors.textMuted, marginTop: 2 },
 
   imageWrapper: {
     width: "100%",
-    borderRadius: 10,
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
     marginBottom: 6,
-    alignItems: "center",
-  },
-
-  imgHorizontal: {
-    width: "100%",
-    maxHeight: 260,
-  },
-
-  imgVertical: {
-    width: "70%",
-    maxHeight: 260,
   },
 
   description: {
@@ -353,4 +553,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   voteText: { color: theme.colors.text, fontWeight: "900" },
+
+  emptySearch: {
+    paddingTop: 32,
+    alignItems: "center",
+  },
+  emptySearchText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+  },
 });

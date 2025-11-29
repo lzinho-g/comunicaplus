@@ -6,6 +6,7 @@ export type Problem = ProblemInput & {
   id: string;
   status: "Aberto" | "Em andamento" | "Resolvido";
   votes: number;
+  votedBy: string[];
   createdAt: number;
 };
 
@@ -13,7 +14,7 @@ type Store = {
   problems: Problem[];
   loaded: boolean;
   addProblem: (p: ProblemInput) => Promise<void>;
-  vote: (id: string) => Promise<void>;
+  vote: (id: string, userId?: string | null) => Promise<boolean>;
   setStatus: (id: string, status: Problem["status"]) => Promise<void>;
   persist: () => Promise<void>;
   load: () => Promise<void>;
@@ -65,6 +66,7 @@ export const useProblems = create<Store>((set, get) => ({
       id: Math.random().toString(36).slice(2),
       status: "Aberto",
       votes: 0,
+      votedBy: [],
       createdAt: Date.now(),
     };
 
@@ -79,12 +81,35 @@ export const useProblems = create<Store>((set, get) => ({
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
   },
 
-  vote: async (id: string) => {
-    const arr = get().problems.map((i) =>
-      i.id === id ? { ...i, votes: i.votes + 1 } : i
-    );
+  vote: async (id: string, userId?: string) => {
+    // se não passou userId, considera voto anônimo (não permitido aqui)
+    if (!userId) return false;
+
+    const arr = get().problems.map((i) => {
+      if (i.id !== id) return i;
+
+      // já votou?
+      if (i.votedBy && i.votedBy.includes(userId)) {
+        return i; // não altera
+      }
+
+      return {
+        ...i,
+        votes: i.votes + 1,
+        votedBy: [...(i.votedBy || []), userId],
+      };
+    });
+
+    // verifica se houve mudança (voto aplicado)
+    const updated = arr.find((p) => p.id === id);
+    const original = get().problems.find((p) => p.id === id);
+
+    const applied = original && updated && updated.votes > original.votes;
+
     set({ problems: arr });
     await AsyncStorage.setItem(KEY, JSON.stringify(arr));
+
+    return Boolean(applied);
   },
 
   setStatus: async (id: string, status: Problem["status"]) => {

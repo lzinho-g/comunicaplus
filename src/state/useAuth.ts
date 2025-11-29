@@ -8,6 +8,7 @@ type User = {
   address: string;
   email: string;
   password: string;
+  photoUri?: string | null;
 };
 
 type AuthStore = {
@@ -29,6 +30,7 @@ type AuthStore = {
   deleteAccount: () => Promise<void>;
   completeFirstLogin: () => Promise<void>;
   updateProfile: (data: Partial<Omit<User, "password">>) => Promise<void>;
+  updatePhoto: (uri: string | null) => Promise<void>;
 };
 
 const KEY = "@comunicaplus/auth";
@@ -137,6 +139,26 @@ export const useAuth = create<AuthStore>((set, get) => ({
     const updated: User = {
       ...state.user,
       ...data,
+    };
+
+    const newState = {
+      user: updated,
+      loggedIn: state.loggedIn,
+      firstLoginCompleted: state.firstLoginCompleted,
+    };
+
+    set(newState);
+    await AsyncStorage.setItem(KEY, JSON.stringify(newState));
+  },
+
+  // Atualiza apenas a foto do usuário (pode ser null para remover)
+  updatePhoto: async (uri: string | null) => {
+    const state = get();
+    if (!state.user) return;
+
+    const updated: User = {
+      ...state.user,
+      photoUri: uri,
     };
 
     const newState = {

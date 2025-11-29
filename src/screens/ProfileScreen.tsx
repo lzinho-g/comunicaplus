@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../state/useAuth";
+import { MaterialCommunityIcons as Icon } from "@expo/vector-icons";
 import { theme } from "../theme/theme";
 
 /* ---------- HELPERS ---------- */
@@ -52,15 +53,14 @@ function isValidEmail(email: string) {
 /* -------------------------------- */
 
 export default function ProfileScreen() {
-  const { user, logout, deleteAccount, updateProfile } = useAuth();
+  const { user, logout, deleteAccount, updateProfile, updatePhoto } = useAuth();
 
   const firstLetter =
     user?.name && user.name.length > 0 ? user.name[0].toUpperCase() : "?";
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // foto de perfil apenas neste aparelho
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // photoUri agora vem do usuário persistido em useAuth
 
   // 🔹 MODO EDIÇÃO
   const [editing, setEditing] = useState(false);
@@ -194,7 +194,8 @@ export default function ProfileScreen() {
     });
 
     if (!result.canceled) {
-      setPhotoUri(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      await updatePhoto(uri);
     }
   }
 
@@ -322,16 +323,20 @@ export default function ProfileScreen() {
 
         <View style={styles.avatarWrapper}>
           <View style={styles.avatarCircle}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.avatarImage} />
+            {user?.photoUri ? (
+              <Image source={{ uri: user.photoUri }} style={styles.avatarImage} />
             ) : (
               <Text style={styles.avatarInitial}>{firstLetter}</Text>
             )}
           </View>
 
           {/* Botão de câmera para trocar foto */}
-          <Pressable style={styles.cameraBadge} onPress={handleChangePhoto}>
-            <Text style={styles.cameraEmoji}>📷</Text>
+          <Pressable
+            accessibilityLabel="Trocar foto de perfil"
+            style={styles.cameraBadge}
+            onPress={handleChangePhoto}
+          >
+            <Icon name="camera" size={18} color="#fff" />
           </Pressable>
         </View>
 
@@ -528,20 +533,21 @@ const styles = StyleSheet.create({
   },
   cameraBadge: {
     position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#000",
+    right: -6,
+    bottom: -6,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
     borderWidth: 2,
     borderColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-  },
-  cameraEmoji: {
-    fontSize: 16,
-    color: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   userName: {
     marginTop: 10,

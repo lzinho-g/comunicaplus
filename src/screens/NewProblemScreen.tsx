@@ -122,12 +122,17 @@ export default function NewProblemScreen() {
     setValue("longitude", longitude);
   };
 
+  // 📷 Tirar foto (câmera)
   const takePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted)
       return Alert.alert("Permissão", "Ative o acesso à câmera.");
 
-    const img = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+    const img = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"], // 👈 API nova (evita o warning do MediaTypeOptions)
+      quality: 0.6,
+    });
+
     if (!img.canceled) {
       const asset = img.assets[0];
       const uri = asset.uri;
@@ -139,13 +144,14 @@ export default function NewProblemScreen() {
     }
   };
 
+  // 🖼 Escolher da galeria
   const pickFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted)
       return Alert.alert("Permissão", "Ative o acesso à galeria.");
 
     const img = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"], // 👈 aqui também, em vez de MediaTypeOptions.Images
       quality: 0.7,
     });
 
@@ -160,11 +166,8 @@ export default function NewProblemScreen() {
     }
   };
 
-  const submit = async (data: ProblemInput) => {
-    await addProblem(data);
-
-    Alert.alert("Sucesso!", "Problema salvo no aparelho.");
-
+  // 🔹 helper para resetar tudo (usado no Enviar e no Cancelar)
+  const resetForm = () => {
     reset({
       title: "",
       category: "Buraco",
@@ -181,6 +184,22 @@ export default function NewProblemScreen() {
     setRegion(INITIAL_REGION);
     setCategoryOpen(false);
     setDescHeight(110);
+  };
+
+  // ao cancelar, além de resetar o formulário, rolar para o topo
+  const handleCancel = () => {
+    resetForm();
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ y: 0, animated: true });
+    }
+  };
+
+  const submit = async (data: ProblemInput) => {
+    await addProblem(data);
+
+    Alert.alert("Sucesso!", "Problema salvo no aparelho.");
+
+    resetForm();
   };
 
   // quando o formulário for inválido, rolar até o primeiro campo com erro
@@ -479,7 +498,7 @@ export default function NewProblemScreen() {
           </Text>
 
           <Pressable
-            style={[styles.btn, styles.btnPrimary]}
+            style={[styles.btn, styles.btnPrimaryAlone]}
             onPress={useMyLocation}
           >
             <Text style={styles.btnText}>Usar minha localização</Text>
@@ -517,13 +536,22 @@ export default function NewProblemScreen() {
             </Pressable>
           </View>
 
-          {/* ENVIAR */}
-          <Pressable
-            style={[styles.btn, styles.btnPrimary]}
-            onPress={handleSubmit(submit, onInvalid)}
-          >
-            <Text style={styles.btnText}>Enviar</Text>
-          </Pressable>
+          {/* BOTÕES FINAIS: CANCELAR + ENVIAR */}
+          <View style={styles.buttonRow}>
+            <Pressable
+              style={[styles.btn, styles.btnSecondary]}
+              onPress={handleCancel}
+            >
+              <Text style={styles.btnSecondaryText}>Cancelar</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.btn, styles.btnPrimary]}
+              onPress={handleSubmit(submit, onInvalid)}
+            >
+              <Text style={styles.btnText}>Enviar</Text>
+            </Pressable>
+          </View>
 
           <View style={{ height: 24 }} />
         </ScrollView>
@@ -610,7 +638,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  btnPrimary: { backgroundColor: theme.colors.primary, marginTop: 12 },
+  // usado no "Usar minha localização", sozinho
+  btnPrimaryAlone: {
+    backgroundColor: theme.colors.primary,
+    marginTop: 12,
+  },
+  // usado no par Cancelar + Enviar (sem marginTop)
+  btnPrimary: {
+    backgroundColor: theme.colors.primary,
+  },
   btnText: { color: "#fff", fontWeight: "700" },
   error: { color: theme.colors.danger, fontSize: 12, marginTop: 4 },
   charCount: {
@@ -624,5 +660,19 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     marginTop: 2,
     marginBottom: 4,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  btnSecondary: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  btnSecondaryText: {
+    color: theme.colors.text,
+    fontWeight: "700",
   },
 });
