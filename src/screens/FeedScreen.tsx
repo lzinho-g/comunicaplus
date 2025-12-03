@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -153,17 +153,6 @@ export default function FeedScreen() {
     return arr;
   }, [problems, orderBy, search, addresses]);
 
-  // quando não existe nenhum problema salvo
-  if (!problems.length) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>
-          Nenhum problema ainda. Envie na aba “Novo”.
-        </Text>
-      </View>
-    );
-  }
-
   // 🔍 quando vier do mapa com focusId, rola até o card e (opcional) expande
   useEffect(() => {
     if (!focusId || !items.length) return;
@@ -186,6 +175,17 @@ export default function FeedScreen() {
       navigation.setParams({ focusId: undefined });
     }, 100);
   }, [focusId, items, navigation]);
+
+  // ⚠️ IMPORTANTE: o return condicional vem DEPOIS de todos os hooks
+  if (!problems.length) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>
+          Nenhum problema ainda. Envie na aba “Novo”.
+        </Text>
+      </View>
+    );
+  }
 
   function handleGoToMap(id: string) {
     navigation.navigate("Mapa", { focusId: id });
@@ -282,6 +282,12 @@ export default function FeedScreen() {
                 </View>
               )}
 
+              {/* Categoria */}
+              <Text style={styles.meta}>
+                <Text style={{ fontWeight: "700" }}>Categoria: </Text>
+                {item.category}
+              </Text>
+
               <Text style={styles.meta}>
                 {address} • {new Date(item.createdAt).toLocaleString()}
               </Text>
@@ -290,7 +296,8 @@ export default function FeedScreen() {
                 <View style={styles.imageWrapper}>
                   {(() => {
                     const aspect = ratio;
-                    const isVertical = typeof aspect === "number" && aspect < 1;
+                    const isVertical =
+                      typeof aspect === "number" && aspect < 1;
 
                     if (isVertical) {
                       return (
